@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#ffffff">
+  <title>Enduro — Coaching Triathlon</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── AUTH ────────────────────────────────────────────────── -->
+    <div id="screen-login" class="auth-screen" style="display:none">
+      <div class="auth-card">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="font-size:1.4rem;font-weight:500">Enduro</div>
+          <div style="font-size:0.85rem;color:var(--text-light);margin-top:4px">Coaching triathlon</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="login-email" placeholder="ton@email.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mot de passe</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="login-error" class="error-msg"></div>
+        <button class="btn btn-primary mt-8" onclick="App.login()">Se connecter</button>
+        <button class="btn btn-ghost" onclick="App.showScreen('register')">Pas encore de compte →</button>
+      </div>
+    </div>
+
+    <div id="screen-register" class="auth-screen" style="display:none">
+      <div class="auth-card">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="font-size:1.4rem;font-weight:500">Créer un compte</div>
+          <div style="font-size:0.85rem;color:var(--text-light);margin-top:4px">Gratuit, aucune carte requise</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="reg-email" placeholder="ton@email.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mot de passe</label>
+          <input type="password" id="reg-password" placeholder="6 caractères minimum" autocomplete="new-password">
+        </div>
+        <div id="reg-error" class="error-msg"></div>
+        <button class="btn btn-primary mt-8" onclick="App.register()">Commencer</button>
+        <button class="btn btn-ghost" onclick="App.showScreen('login')">Déjà un compte →</button>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 01 : ENTRÉE ────────────────────────────────────── -->
+    <div id="screen-01" class="screen">
+      <div class="screen-content">
+        <div class="entry-logo">
+          <div class="logo-mark">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 13L8 3L13 13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M5.5 9.5h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="logo-name">Enduro</span>
+        </div>
+        <h1 style="margin-bottom:8px">Quel est ton prochain objectif&nbsp;?</h1>
+        <p style="margin-bottom:28px">On commence par là. Pas de formulaire.</p>
+        <div class="choice-list" id="goal-choices"></div>
+        <div class="mt-24"></div>
+        <button class="btn btn-primary" id="btn-goal" disabled onclick="App.goToOnboarding()">Continuer</button>
+        <p class="text-center text-small text-muted mt-12">Aucun compte requis pour commencer.</p>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 02 : ONBOARDING ────────────────────────────────── -->
+    <div id="screen-02" class="screen">
+      <div class="nav-bar">
+        <button class="back-btn" onclick="App.onboardingBack()">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Retour
+        </button>
+        <span class="label-xs" id="ob-step-label">Question 1 / 6</span>
+      </div>
+      <div class="screen-content" style="padding-top:16px">
+        <div class="progress-bar"><div class="progress-fill" id="ob-progress" style="width:16%"></div></div>
+        <div id="ob-question"></div>
+        <div class="mt-20"></div>
+        <button class="btn btn-primary" id="ob-cta" disabled onclick="App.onboardingNext()">Continuer</button>
+        <div class="skip-link" id="ob-skip" onclick="App.onboardingSkip()">Je ne sais pas — estimer ensemble</div>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 03 : FAISABILITÉ ───────────────────────────────── -->
+    <div id="screen-03" class="screen">
+      <div class="nav-bar">
+        <button class="back-btn" onclick="App.showScreen('02')">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Modifier mes réponses
+        </button>
+      </div>
+      <div class="screen-content" id="screen-03-content">
+        <div class="loader"><div class="loader-ring"></div><p>Analyse de ton objectif…</p></div>
+      </div>
+    </div>
+
+    <!-- ── CHARGEMENT PLAN ──────────────────────────────────────── -->
+    <div id="screen-loading" class="screen" style="justify-content:center;align-items:center">
+      <div class="loader">
+        <div class="loader-ring"></div>
+        <p>Construction de ton plan…</p>
+        <p class="text-small text-muted">Quelques secondes.</p>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 05 : VUE SEMAINE ───────────────────────────────── -->
+    <div id="screen-05" class="screen">
+      <div class="nav-bar">
+        <span id="plan-name" class="label-xs" style="color:var(--text-mid)">Mon plan</span>
+        <button class="btn-ghost" style="font-size:0.78rem;padding:4px 0" onclick="App.logout()">Déconnexion</button>
+      </div>
+      <div class="screen-content" id="screen-05-content">
+        <div class="loader"><div class="loader-ring"></div></div>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 06 : DÉTAIL SÉANCE ─────────────────────────────── -->
+    <div id="screen-06" class="screen">
+      <div class="nav-bar">
+        <button class="back-btn" onclick="App.showScreen('05')">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Retour au plan
+        </button>
+      </div>
+      <div class="screen-content" id="screen-06-content">
+        <div class="loader"><div class="loader-ring"></div></div>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 07 : FEEDBACK ──────────────────────────────────── -->
+    <div id="screen-07" class="screen">
+      <div class="nav-bar">
+        <button class="back-btn" onclick="App.showScreen('06')">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Retour
+        </button>
+      </div>
+      <div class="screen-content" id="screen-07-content">
+        <div class="loader"><div class="loader-ring"></div></div>
+      </div>
+    </div>
+
+    <!-- ── ÉCRAN 08 : ADAPTATION ────────────────────────────────── -->
+    <div id="screen-08" class="screen">
+      <div class="nav-bar">
+        <button class="back-btn" onclick="App.showScreen('05')">
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Retour au plan
+        </button>
+      </div>
+      <div class="screen-content" id="screen-08-content">
+        <div class="loader"><div class="loader-ring"></div></div>
+      </div>
+    </div>
+
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
