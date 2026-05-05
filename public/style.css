@@ -849,3 +849,184 @@ textarea.comment-field {
   opacity: 0.3;
   cursor: default;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ENDURO V1.21.2 — UX Corrections
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Renforcement musculaire — couleur dédiée ────────────────────── */
+:root {
+  --strength:    #C2410C;   /* orange-brique, distinct de run/swim/bike */
+  --strength-bg: #FEF0E7;
+}
+
+.stripe-strength         { background: var(--strength); }
+.tag-strength            { background: var(--strength-bg); color: #7C2D12; }
+.bar-strength            { background: var(--strength); }
+
+/* ── Vue mois ────────────────────────────────────────────────────── */
+.month-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.month-week-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.month-week-card:hover { border-color: var(--border-mid); }
+.month-week-card.is-current { border: 1.5px solid var(--border-mid); }
+
+.mwc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+}
+.mwc-label { font-size: 0.82rem; font-weight: 500; }
+.mwc-vol   { font-size: 0.82rem; color: var(--text-light); }
+
+.mwc-bar {
+  height: 3px;
+  display: flex;
+  gap: 2px;
+  margin: 0 14px 10px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mwc-days {
+  display: flex;
+  gap: 3px;
+  padding: 0 14px 12px;
+}
+.mwc-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.mwc-day-abbr { font-size: 0.6rem; color: var(--text-hint); text-transform: uppercase; }
+.mwc-day-dot  { width: 8px; height: 8px; border-radius: 50%; }
+.mwc-day-dot.rest  { background: var(--border-mid); }
+.mwc-day-dot.key   { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px currentColor; }
+
+/* ── Déplacement de séance — modal ───────────────────────────────── */
+.move-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.move-modal {
+  background: var(--bg);
+  border-radius: 16px 16px 0 0;
+  padding: 20px var(--pad) 32px;
+  width: 100%;
+  max-width: var(--max-w);
+}
+.move-modal-title {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.move-modal-sub {
+  font-size: 0.82rem;
+  color: var(--text-light);
+  margin-bottom: 18px;
+}
+.move-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  margin-bottom: 16px;
+}
+.move-day-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border: 0.5px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-mid);
+  transition: background 0.12s, border-color 0.12s;
+}
+.move-day-btn.occupied { background: var(--bg-2); color: var(--text-hint); }
+.move-day-btn.selected { border: 1.5px solid var(--text); background: var(--bg-2); color: var(--text); font-weight: 500; }
+.move-day-btn.current  { border-color: var(--border-mid); font-weight: 500; }
+.move-day-btn .move-day-disc {
+  width: 6px; height: 6px; border-radius: 50%; margin-top: 2px;
+}
+
+.move-alert {
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  display: none;
+}
+.move-alert.show { display: block; }
+.move-alert.warn { background: var(--run-bg); color: #412402; }
+.move-alert.info { background: var(--bike-bg); color: #085041; }
+
+/* ── Bouton "Changer de jour" dans la carte séance ───────────────── */
+.move-session-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-mid);
+  background: var(--bg-2);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 10px;
+  width: 100%;
+  justify-content: center;
+}
+.move-session-btn:hover { background: var(--bg-3); }
+
+/* ── Onglets semaine / mois ──────────────────────────────────────── */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px var(--pad) 0;
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+.view-tab {
+  flex: 1;
+  padding: 8px;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-light);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  transition: color 0.12s;
+}
+.view-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}

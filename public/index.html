@@ -113,14 +113,31 @@
       </div>
     </div>
 
-    <!-- ── ÉCRAN 05 : VUE SEMAINE ───────────────────────────────── -->
+    <!-- ── ÉCRAN 05 : VUE SEMAINE / MOIS ──────────────────────────── -->
     <div id="screen-05" class="screen">
       <div class="nav-bar">
         <span id="plan-name" class="label-xs" style="color:var(--text-mid)">Mon plan</span>
         <button class="btn-ghost" style="font-size:0.78rem;padding:4px 0" onclick="App.logout()">Déconnexion</button>
       </div>
+      <!-- Onglets Semaine / Mois -->
+      <div class="view-tabs">
+        <button class="view-tab active" id="tab-week" onclick="App.switchView('week')">Semaine</button>
+        <button class="view-tab" id="tab-month" onclick="App.switchView('month')">Mois</button>
+      </div>
       <div class="screen-content" id="screen-05-content">
         <div class="loader"><div class="loader-ring"></div></div>
+      </div>
+    </div>
+
+    <!-- ── MODAL DÉPLACEMENT SÉANCE ────────────────────────────────── -->
+    <div id="move-modal-overlay" class="move-modal-overlay" style="display:none" onclick="App.closeMoveModal(event)">
+      <div class="move-modal" onclick="event.stopPropagation()">
+        <div class="move-modal-title">Changer de jour</div>
+        <div class="move-modal-sub" id="move-modal-sub">Choisis un autre jour pour cette séance.</div>
+        <div class="move-alert" id="move-alert"></div>
+        <div class="move-days-grid" id="move-days-grid"></div>
+        <button class="btn btn-primary" id="move-confirm-btn" disabled onclick="App.confirmMoveSession()">Déplacer la séance</button>
+        <button class="btn btn-secondary mt-8" onclick="App.closeMoveModal()">Annuler</button>
       </div>
     </div>
 

@@ -600,12 +600,33 @@ const App = (() => {
       const dayNum  = sessionDate.getDate();
       const cardClass = `day-card ${isToday ? 'today' : ''} ${isDone ? 'done' : ''}`;
       const dayAbbrColor = isToday ? `style="color:var(--${s.discipline === 'rest' ? 'text-light' : s.discipline})"` : '';
-      const typePill = s.discipline === 'rest' ? '' : `<span class="tag tag-${sessionTypeToTagClass(s.session_type)}" style="font-size:0.65rem">${sessionTypeLabel(s.session_type)}</span>`;
+
+      // Renforcement → tag spécifique
+      const isStrength = s.name?.toLowerCase().includes('renforcement') || s.session_type === 'strength';
+      const tagClass = isStrength ? 'strength' : sessionTypeToTagClass(s.session_type);
+      const tagLabel = isStrength ? 'Renforcement' : sessionTypeLabel(s.session_type);
+      const typePill = s.discipline === 'rest' ? '' : `<span class="tag tag-${tagClass}" style="font-size:0.65rem">${tagLabel}</span>`;
+
+      // Durée arrondie à 5 min
       const dur = s.duration_minutes ? minToHours(s.duration_minutes) : '';
+
+      // Sous-titre : natation affiche aussi les mètres
+      let subMeta = '';
+      if (s.discipline !== 'rest') {
+        if (s.discipline === 'swim' && s.distance_m) {
+          subMeta = `Natation · ~${Math.round(s.distance_m / 100) * 100} m`;
+        } else if (isStrength) {
+          subMeta = 'Renforcement musculaire';
+        } else {
+          subMeta = disciplineLabel(s.discipline) + (s.session_type === 'brick' ? '' : ' · ' + sessionTypeLabel(s.session_type));
+        }
+      } else {
+        subMeta = 'Pas d\'entraînement';
+      }
 
       return `
         <div class="${cardClass}" onclick="App.openSession(${s.id})">
-          <div class="day-stripe stripe-${s.discipline}"></div>
+          <div class="day-stripe ${stripeClass(s)}"></div>
           <div class="day-inner">
             <div class="day-label">
               <div class="day-abbr" ${dayAbbrColor}>${dayAbbr}</div>
@@ -614,7 +635,7 @@ const App = (() => {
             </div>
             <div class="day-content">
               <div class="day-name">${s.name}</div>
-              <div class="day-meta">${s.discipline !== 'rest' ? disciplineLabel(s.discipline) + (s.session_type === 'brick' ? '' : ' · ' + sessionTypeLabel(s.session_type)) : 'Pas d\'entraînement'}</div>
+              <div class="day-meta">${subMeta}</div>
             </div>
             <div class="day-right">
               ${dur ? `<div class="day-dur">${dur}</div>` : ''}
@@ -832,10 +853,21 @@ const App = (() => {
     const modifiedBadge = s.is_modified
       ? `<span class="badge-adjusted">Ajustée</span>` : '';
 
+    // Distance natation
+    const swimDistInfo = s.discipline === 'swim' && s.distance_m
+      ? `<div class="sep"></div><span class="text-small text-muted">~${Math.round(s.distance_m / 100) * 100} m</span>`
+      : s.distance_km ? `<div class="sep"></div><span class="text-small text-muted">~${s.distance_km} km</span>` : '';
+
+    // Renforcement : tag spécifique
+    const isStrength = s.name?.toLowerCase().includes('renforcement') || s.session_type === 'strength';
+    const discTag = isStrength
+      ? `<span class="tag tag-strength">Renforcement</span>`
+      : `<span class="tag tag-${s.discipline}">${disciplineLabel(s.discipline)}</span>`;
+
     el.innerHTML = `
       <div class="session-header">
         <div class="session-meta-row mb-8">
-          <span class="tag tag-${s.discipline}">${disciplineLabel(s.discipline)}</span>
+          ${discTag}
           <span class="tag tag-${sessionTypeToTagClass(s.session_type)}">${sessionTypeLabel(s.session_type)}</span>
           ${modifiedBadge}
         </div>
@@ -846,7 +878,7 @@ const App = (() => {
           <div class="sep"></div>
           <span class="text-small text-muted">Difficulté</span>
           <div class="difficulty-dots">${difficultyDots}</div>
-          ${s.distance_km ? `<div class="sep"></div><span class="text-small text-muted">~${s.distance_km} km</span>` : ''}
+          ${swimDistInfo}
         </div>
       </div>
 
@@ -860,15 +892,21 @@ const App = (() => {
         ${s.modified_reason ? `<p style="margin-top:8px;font-size:0.78rem;color:var(--accent-dark)">✦ ${s.modified_reason}</p>` : ''}
       </div>
 
-      <a href="/api/sessions/${s.id}/export" class="export-btn" style="margin-bottom:12px;text-decoration:none">
+      <a href="/api/sessions/${s.id}/export" class="export-btn" style="margin-bottom:8px;text-decoration:none">
         <div class="export-dot"></div>
         Télécharger vers Garmin
         <span style="font-size:0.78rem;color:var(--text-light)">.tcx</span>
       </a>
 
+      ${s.discipline !== 'rest' && !doneAlready ? `
+        <button class="move-session-btn" onclick="App.openMoveModal(${s.id}, '${s.date}', '${(s.name||'').replace(/'/g,"\\'")}')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Changer de jour
+        </button>` : ''}
+
       ${doneAlready
-        ? `<div class="coach-intro teal" style="text-align:center">✓ Séance enregistrée (RPE ${s.rpe || '—'}/10)</div>`
-        : `<button class="btn btn-primary" onclick="App.openFeedback(${s.id})">Enregistrer ma séance</button>`
+        ? `<div class="coach-intro teal" style="text-align:center;margin-top:10px">✓ Séance enregistrée (RPE ${s.rpe || '—'}/10)</div>`
+        : `<button class="btn btn-primary" style="margin-top:10px" onclick="App.openFeedback(${s.id})">Enregistrer ma séance</button>`
       }
     `;
   }
@@ -1140,24 +1178,234 @@ const App = (() => {
   // UTILITAIRES
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Arrondit une durée en minutes au multiple de 5 le plus proche (règle 4)
+  function roundToFive(min) {
+    return Math.round(min / 5) * 5;
+  }
+
   function minToHours(min) {
     if (!min || min === 0) return '0 min';
-    if (min < 60) return `${min} min`;
-    const h = Math.floor(min / 60);
-    const m = min % 60;
+    const rounded = roundToFive(min);
+    if (rounded < 60) return `${rounded} min`;
+    const h = Math.floor(rounded / 60);
+    const m = rounded % 60;
     return m > 0 ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`;
   }
 
   function disciplineLabel(d) {
-    return { swim: 'Natation', bike: 'Vélo', run: 'Course à pied', brick: 'Brick', rest: 'Repos' }[d] || d;
+    return { swim: 'Natation', bike: 'Vélo', run: 'Course à pied', brick: 'Brick', rest: 'Repos', strength: 'Renforcement' }[d] || d;
   }
 
   function sessionTypeLabel(t) {
-    return { endurance: 'Endurance', threshold: 'Qualité', long: 'Longue', brick: 'Brick', recovery: 'Récupération', rest: 'Repos' }[t] || t;
+    return { endurance: 'Endurance', threshold: 'Qualité', long: 'Longue', brick: 'Brick', recovery: 'Récupération', rest: 'Repos', strength: 'Renforcement', tempo: 'Tempo' }[t] || t;
   }
 
   function sessionTypeToTagClass(t) {
-    return { endurance: 'endurance', threshold: 'threshold', long: 'long', brick: 'brick', recovery: 'recovery', rest: 'rest' }[t] || 'rest';
+    return { endurance: 'endurance', threshold: 'threshold', long: 'long', brick: 'brick', recovery: 'recovery', rest: 'rest', strength: 'strength', tempo: 'threshold' }[t] || 'rest';
+  }
+
+  // Couleur stripe selon discipline + type (renforcement = orange-brique)
+  function stripeClass(s) {
+    if (s.discipline === 'rest') return 'stripe-rest';
+    if (s.name?.toLowerCase().includes('renforcement') || s.session_type === 'strength') return 'stripe-strength';
+    return `stripe-${s.discipline}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VUE MOIS (V1.21.2 — règle 6)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let currentView = 'week'; // 'week' | 'month'
+
+  function switchView(view) {
+    currentView = view;
+    document.getElementById('tab-week')?.classList.toggle('active', view === 'week');
+    document.getElementById('tab-month')?.classList.toggle('active', view === 'month');
+    if (view === 'week') {
+      loadAndShowWeek();
+    } else {
+      renderMonthView();
+    }
+  }
+
+  async function renderMonthView() {
+    const el = document.getElementById('screen-05-content');
+    el.innerHTML = '<div class="loader"><div class="loader-ring"></div></div>';
+
+    try {
+      const current = await api('GET', '/plans/current');
+      if (!current) return;
+
+      const hw = current.horizon_weeks || [];
+      const today = new Date().toISOString().split('T')[0];
+
+      const DAYS_FR = ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'];
+      const intenseTypes = ['threshold', 'tempo', 'brick', 'long'];
+
+      // Couleur par discipline
+      const discColor = {
+        swim: 'var(--swim)', bike: 'var(--bike)', run: 'var(--run)',
+        brick: 'var(--brick)', rest: 'var(--border-mid)', strength: 'var(--strength)',
+      };
+
+      const weeksHtml = await Promise.all(hw.map(async (w, i) => {
+        const weekData = await api('GET', `/weeks/${w.id}`);
+        const sessions = weekData.sessions || [];
+        const isCurrent = w.id === current.current_week?.id;
+
+        // Barre de volume
+        const swimMin = sessions.filter(s => s.discipline === 'swim').reduce((a,s)=>a+(s.duration_minutes||0),0);
+        const bikeMin = sessions.filter(s => s.discipline==='bike'||s.discipline==='brick').reduce((a,s)=>a+(s.duration_minutes||0),0);
+        const runMin  = sessions.filter(s => s.discipline==='run').reduce((a,s)=>a+(s.duration_minutes||0),0);
+        const total   = swimMin + bikeMin + runMin;
+
+        const barHtml = total > 0 ? `
+          <div class="mwc-bar">
+            ${swimMin ? `<div style="flex:${swimMin};background:var(--swim);border-radius:2px"></div>` : ''}
+            ${bikeMin ? `<div style="flex:${bikeMin};background:var(--bike);border-radius:2px"></div>` : ''}
+            ${runMin  ? `<div style="flex:${runMin};background:var(--run);border-radius:2px"></div>` : ''}
+          </div>` : '<div class="mwc-bar" style="background:var(--border)"></div>';
+
+        // Points par jour (lun–dim)
+        const sessionsByDay = {};
+        for (const s of sessions) {
+          const d = new Date(s.date).getDay(); // 0=dim,1=lun…
+          sessionsByDay[d] = s;
+        }
+
+        const daysHtml = [1,2,3,4,5,6,0].map(dayIdx => {
+          const s = sessionsByDay[dayIdx];
+          const isRest = !s || s.discipline === 'rest';
+          const isKey  = s && intenseTypes.includes(s.session_type);
+          const color  = s ? (discColor[s.discipline] || 'var(--run)') : 'var(--border-mid)';
+          const dotStyle = isKey
+            ? `background:${color};box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px ${color}`
+            : `background:${color}`;
+          return `
+            <div class="mwc-day">
+              <div class="mwc-day-abbr">${DAYS_FR[dayIdx]}</div>
+              <div class="mwc-day-dot" style="${dotStyle}"></div>
+            </div>`;
+        }).join('');
+
+        const weekTypeBadge = w.week_type === 'recovery' ? ' · Récupération' : w.week_type === 'taper' ? ' · Affûtage' : '';
+
+        return `
+          <div class="month-week-card ${isCurrent ? 'is-current' : ''}" onclick="App.switchView('week');App.loadWeekDetail(${w.id})">
+            <div class="mwc-head">
+              <div class="mwc-label">Semaine ${w.week_number}${weekTypeBadge}</div>
+              <div class="mwc-vol">${minToHours(total)}</div>
+            </div>
+            ${barHtml}
+            <div class="mwc-days">${daysHtml}</div>
+          </div>`;
+      }));
+
+      el.innerHTML = `
+        <div class="sl" style="margin-top:8px">4 prochaines semaines</div>
+        <div class="month-grid">${weeksHtml.join('')}</div>
+        <p class="text-small text-muted text-center mt-12">● Séance clé &nbsp; ○ Séance légère &nbsp; · Repos</p>
+      `;
+    } catch(e) {
+      el.innerHTML = `<p class="text-muted empty-state">Erreur : ${e.message}</p>`;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DÉPLACEMENT DE SÉANCE (V1.21.2 — règle 1)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let moveState = { sessionId: null, currentDate: null, selectedDate: null, weekSessions: [] };
+
+  function openMoveModal(sessionId, sessionDate, sessionName) {
+    moveState = { sessionId, currentDate: sessionDate, selectedDate: null, weekSessions: state.currentWeek?.sessions || [] };
+
+    document.getElementById('move-modal-sub').textContent = `"${sessionName}" — choisis un autre jour.`;
+    document.getElementById('move-confirm-btn').disabled = true;
+    document.getElementById('move-alert').className = 'move-alert';
+    document.getElementById('move-alert').textContent = '';
+
+    // Construire la grille 7 jours autour de la semaine
+    const baseDate = new Date(sessionDate);
+    // Aller au lundi de la semaine
+    const dayOfWeek = baseDate.getDay();
+    const monday = new Date(baseDate);
+    monday.setDate(baseDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+    const grid = document.getElementById('move-days-grid');
+    const DAYS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+    const sessionDates = moveState.weekSessions
+      .filter(s => s.discipline !== 'rest')
+      .map(s => s.date?.toString().split('T')[0]);
+
+    grid.innerHTML = Array.from({length: 7}, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const ds = d.toISOString().split('T')[0];
+      const isCurrent  = ds === sessionDate;
+      const isOccupied = sessionDates.includes(ds) && !isCurrent;
+      const dayNum     = d.getDate();
+      const cls = isCurrent ? 'current' : isOccupied ? 'occupied' : '';
+
+      return `<button class="move-day-btn ${cls}" data-date="${ds}"
+        onclick="App.selectMoveDay('${ds}', ${isOccupied})" ${isCurrent ? 'disabled' : ''}>
+        <span>${DAYS[i]}</span>
+        <span style="font-size:0.8rem;font-weight:500">${dayNum}</span>
+      </button>`;
+    }).join('');
+
+    document.getElementById('move-modal-overlay').style.display = 'flex';
+  }
+
+  function selectMoveDay(date, isOccupied) {
+    moveState.selectedDate = date;
+
+    // Mettre à jour sélection visuelle
+    document.querySelectorAll('.move-day-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.date === date);
+    });
+
+    const alertEl = document.getElementById('move-alert');
+    if (isOccupied) {
+      alertEl.textContent = 'Il y a déjà une séance ce jour-là — l\'application ne bloque pas, mais pense à bien récupérer.';
+      alertEl.className = 'move-alert warn show';
+    } else {
+      alertEl.className = 'move-alert';
+    }
+
+    document.getElementById('move-confirm-btn').disabled = false;
+  }
+
+  async function confirmMoveSession() {
+    if (!moveState.sessionId || !moveState.selectedDate) return;
+    const btn = document.getElementById('move-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Déplacement…';
+
+    try {
+      const result = await api('PATCH', `/sessions/${moveState.sessionId}/move`, {
+        new_date: moveState.selectedDate,
+      });
+
+      closeMoveModal();
+
+      if (result.conflict_warning) {
+        setTimeout(() => alert('⚠️ ' + result.conflict_warning), 100);
+      }
+
+      // Recharger la semaine
+      await loadAndShowWeek();
+    } catch(e) {
+      alert('Erreur : ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Déplacer la séance';
+    }
+  }
+
+  function closeMoveModal(event) {
+    if (event && event.target !== document.getElementById('move-modal-overlay')) return;
+    document.getElementById('move-modal-overlay').style.display = 'none';
+    moveState = { sessionId: null, currentDate: null, selectedDate: null, weekSessions: [] };
   }
 
   // ── API PUBLIQUE DE L'APP ─────────────────────────────────────────────────
@@ -1167,6 +1415,8 @@ const App = (() => {
     onboardingBack, onboardingNext, onboardingSkip,
     obSelectOpt, obToggleTag, obInput,
     generatePlan, loadAndShowWeek, loadWeekDetail,
+    switchView, renderMonthView,
+    openMoveModal, selectMoveDay, confirmMoveSession, closeMoveModal,
     openSession, openFeedback,
     fbSelectStatus, fbSetRpe, fbSetPain, fbToggleZone, fbSetComment,
     submitFeedback, acceptAdaptation, rejectAdaptation,

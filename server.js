@@ -489,6 +489,41 @@ app.get('/api/weeks/:weekId', auth, (req, res) => {
 
 // ─── ROUTES SÉANCE ────────────────────────────────────────────────────────────
 
+// V1.21.2 — Déplacer une séance vers une autre date
+app.patch('/api/sessions/:id/move', auth, (req, res) => {
+  const { new_date } = req.body;
+  if (!new_date) return res.status(400).json({ error: 'Date manquante' });
+
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ? AND athlete_id = ?')
+    .get(req.params.id, req.athlete.id);
+  if (!session) return res.status(404).json({ error: 'Séance introuvable' });
+  if (session.discipline === 'rest') return res.status(400).json({ error: 'On ne déplace pas un jour de repos' });
+
+  // Vérifier les conflits : y a-t-il déjà une séance intense ce jour-là ?
+  const existingSessions = db.prepare(
+    `SELECT * FROM sessions WHERE athlete_id = ? AND date = ? AND id != ? AND discipline != 'rest'`
+  ).all(req.athlete.id, new_date, session.id);
+
+  const intenseTypes = ['threshold', 'tempo', 'brick'];
+  const hasIntenseConflict = existingSessions.some(s => intenseTypes.includes(s.session_type))
+    && intenseTypes.includes(session.session_type);
+
+  const old_date = session.date;
+  const day_of_week = new Date(new_date).getDay();
+
+  db.prepare('UPDATE sessions SET date = ?, day_of_week = ?, is_modified = 1, modified_reason = ? WHERE id = ?')
+    .run(new_date, day_of_week, `Déplacée manuellement (ancienne date : ${old_date})`, session.id);
+
+  res.json({
+    ok: true,
+    old_date,
+    new_date,
+    conflict_warning: hasIntenseConflict
+      ? 'Deux séances intenses le même jour — pense à récupérer entre les deux.'
+      : null,
+  });
+});
+
 app.get('/api/sessions/:id', auth, (req, res) => {
   const session = db.prepare(`SELECT s.*, f.id as feedback_id, f.status as feedback_status,
     f.rpe, f.pain_reported, f.pain_zones, f.comment
