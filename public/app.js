@@ -131,15 +131,15 @@ const App = (() => {
 
   const GOAL_TYPES = [
     { id: 'triathlon', label: 'Triathlon', desc: 'Sprint, Olympique, Half, Ironman…', icon: 'tri' },
-    { id: 'run',       label: 'Course à pied ou trail', desc: 'Route, montagne, semi, marathon…', icon: 'run' },
-    { id: 'free',      label: 'Entraînement libre', desc: 'Pas de course précise, je progresse à mon rythme', icon: 'free' },
+    { id: 'run',       label: 'Course à pied', desc: '10 km, semi, marathon…', icon: 'run' },
+    { id: 'trail',     label: 'Trail', desc: 'Du 20 km à l\'ultra, avec dénivelé', icon: 'trail' },
   ];
 
   function renderScreen01() {
     const icons = {
-      tri:  `<svg viewBox="0 0 22 22" fill="none"><path d="M3 14Q6 10 9 14Q12 18 15 14Q18 10 20 12" stroke="var(--bike)" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="14" cy="5" r="2" fill="var(--bike)"/><path d="M11 8L14 5" stroke="var(--bike)" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-      run:  `<svg viewBox="0 0 22 22" fill="none"><circle cx="14" cy="4" r="2" fill="var(--run)"/><path d="M10 7.5L12 12L9 15L11 20" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 12L16 11L18 13" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      free: `<svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="7" stroke="var(--text-light)" stroke-width="1.5"/><path d="M11 7v4l3 2" stroke="var(--text-light)" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+      tri:   `<svg viewBox="0 0 22 22" fill="none"><path d="M3 14Q6 10 9 14Q12 18 15 14Q18 10 20 12" stroke="var(--bike)" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="14" cy="5" r="2" fill="var(--bike)"/><path d="M11 8L14 5" stroke="var(--bike)" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+      run:   `<svg viewBox="0 0 22 22" fill="none"><circle cx="14" cy="4" r="2" fill="var(--run)"/><path d="M10 7.5L12 12L9 15L11 20" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 12L16 11L18 13" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      trail: `<svg viewBox="0 0 22 22" fill="none"><path d="M3 18L8 10L12 14L16 8L20 12" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M16 4L20 8" stroke="var(--run)" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="4" r="1.5" fill="var(--run)"/></svg>`,
     };
 
     const container = document.getElementById('goal-choices');
@@ -177,7 +177,9 @@ const App = (() => {
   // ─────────────────────────────────────────────────────────────────────────
 
   function getOnboardingSteps() {
-    const isTri = state.onboarding.goalType === 'triathlon';
+    const isTri   = state.onboarding.goalType === 'triathlon';
+    const isTrail = state.onboarding.goalType === 'trail';
+
     const steps = [
       {
         key: 'first_name', label: 'Pour commencer',
@@ -186,18 +188,22 @@ const App = (() => {
       },
       {
         key: 'discipline', label: 'Ton objectif',
-        q: isTri ? 'Tu prépares quel triathlon ?' : 'Tu prépares quelle distance ?',
+        q: isTri ? 'Tu prépares quel triathlon ?' : isTrail ? 'Tu prépares quel trail ?' : 'Tu prépares quelle distance ?',
         hint: 'Sois précis si tu peux.',
         type: 'options',
         opts: isTri
-          ? [{ v: 'triathlon_full', l: 'Ironman (Full distance)', s: '3,8 km — 180 km — 42 km' },
-             { v: 'triathlon_half', l: 'Half-Ironman / 70.3', s: 'Distance intermédiaire' },
-             { v: 'triathlon_olympic', l: 'Distance Olympique', s: '1,5 km — 40 km — 10 km' },
-             { v: 'triathlon_sprint', l: 'Sprint', s: 'Format court' }]
-          : [{ v: 'run_marathon', l: 'Marathon', s: '42 km' },
-             { v: 'run_semi', l: 'Semi-marathon', s: '21 km' },
-             { v: 'run_10k', l: '10 km', s: '' },
-             { v: 'run_trail', l: 'Trail', s: 'Distance variable' }],
+          ? [{ v: 'triathlon_full',    l: 'Ironman (Full distance)', s: '3,8 km — 180 km — 42 km' },
+             { v: 'triathlon_half',    l: 'Half-Ironman / 70.3',    s: 'Distance intermédiaire' },
+             { v: 'triathlon_olympic', l: 'Distance Olympique',      s: '1,5 km — 40 km — 10 km' },
+             { v: 'triathlon_sprint',  l: 'Sprint',                  s: 'Format court' }]
+          : isTrail
+          ? [{ v: 'run_trail_short',  l: 'Trail court',   s: '20–30 km, jusqu\'à ~1 500 m D+' },
+             { v: 'run_trail_medium', l: 'Trail médium',  s: '50 km, jusqu\'à ~3 000 m D+' },
+             { v: 'run_trail_long',   l: 'Trail long',    s: '80–100 km, jusqu\'à ~6 000 m D+' },
+             { v: 'run_trail_ultra',  l: 'Ultra-trail',   s: '120–170 km, > 8 000 m D+' }]
+          : [{ v: 'run_10k',      l: '10 km',         s: '' },
+             { v: 'run_semi',     l: 'Semi-marathon', s: '21 km' },
+             { v: 'run_marathon', l: 'Marathon',      s: '42 km' }],
       },
       {
         key: 'race_date', label: 'La date',
@@ -208,19 +214,19 @@ const App = (() => {
       {
         key: 'race_name', label: 'La course',
         q: 'Elle s\'appelle comment ?', hint: 'Optionnel — pour personnaliser le plan.',
-        type: 'text', placeholder: 'Ex : Ironman Frankfurt',
+        type: 'text', placeholder: isTri ? 'Ex : Ironman Frankfurt' : isTrail ? 'Ex : UTMB, Grand Raid…' : 'Ex : Marathon de Paris',
         optional: true,
       },
       {
         key: 'weekly_hours', label: 'Ton niveau actuel',
         q: 'Tu t\'entraînes combien d\'heures par semaine en ce moment ?',
         hint: 'En moyenne sur les 4 dernières semaines.',
-        type: 'number', placeholder: '8', unit: 'h / sem',
+        type: 'number', placeholder: isTri ? '8' : '5', unit: 'h / sem',
       },
       {
         key: 'run_10k_pace', label: 'Tes références',
         q: 'Tu connais ton allure sur 10 km ?', hint: 'Approximatif suffit. Ex : 4:30 pour 4 min 30 /km.',
-        type: 'text', placeholder: '4:30', unit: 'min/km', optional: true,
+        type: 'text', placeholder: '5:00', unit: 'min/km', optional: true,
       },
       {
         key: 'injury_zones', label: 'Ta santé',
@@ -347,19 +353,11 @@ const App = (() => {
     };
 
     try {
-      // Sauvegarder le profil
       await api('PUT', '/profile', profile);
 
-      // Préparer l'objectif
-      const disciplineMap = {
-        run_marathon: 'triathlon_half', run_semi: 'triathlon_half',
-        run_10k: 'triathlon_sprint', run_trail: 'triathlon_half',
-      };
-      const discipline = a.discipline?.startsWith('triathlon')
-        ? a.discipline
-        : (disciplineMap[a.discipline] || 'triathlon_half');
+      // La discipline est passée directement — plus de remapping incorrect
+      const discipline = a.discipline || 'run_semi';
 
-      // Aller à la faisabilité
       showScreen('03');
       await renderFeasibility(discipline, a.race_date, a.race_name);
     } catch (e) {
@@ -549,13 +547,39 @@ const App = (() => {
     const runPct   = 100 - swimPct - bikePct;
     const today    = new Date().toISOString().split('T')[0];
 
+    // Détecter si c'est une semaine CAP/trail (pas de natation ni vélo)
+    const sport = sessions.some(s => s.discipline === 'swim') ? 'triathlon'
+      : sessions.some(s => s.discipline === 'bike') ? 'triathlon' : 'run';
+
     const weekTypeBadge = week.week_type === 'recovery'
       ? `<span class="tag tag-rest">Récupération</span>`
       : week.week_type === 'taper'
       ? `<span class="tag tag-rest">Affûtage</span>`
       : '';
 
-    // ── Séances S confirmées ─────────────────────────────────────────────
+    // ── Navigation ← → entre semaines ────────────────────────────────────
+    const hw = horizonWeeks || [];
+    const currentIdx = hw.findIndex(w => w.id === week.id);
+    const prevWeek = currentIdx > 0 ? hw[currentIdx - 1] : null;
+    const nextWeek = currentIdx < hw.length - 1 ? hw[currentIdx + 1] : null;
+
+    const navHtml = `
+      <div class="week-nav">
+        <button class="week-nav-btn" ${prevWeek ? `onclick="App.loadWeekDetail(${prevWeek.id})"` : 'disabled'}>
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          ${prevWeek ? `S${prevWeek.week_number}` : ''}
+        </button>
+        <div class="week-nav-label">
+          <span>Semaine ${week.week_number}</span>
+          ${hw[currentIdx]?.horizon_label ? `<span class="horizon-badge ${hw[currentIdx].horizon === 'confirmed' ? 'horizon-label-probable' : 'horizon-label-indicative'}" style="margin-left:6px">${hw[currentIdx].horizon_label}</span>` : ''}
+        </div>
+        <button class="week-nav-btn" ${nextWeek ? `onclick="App.loadWeekDetail(${nextWeek.id})"` : 'disabled'}>
+          ${nextWeek ? `S${nextWeek.week_number}` : ''}
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1L6 6L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>`;
+
+    // ── Séances ────────────────────────────────────────────────────────────
     const daysHtml = sessions.map(s => {
       const sessionDate = new Date(s.date);
       const isToday = s.date === today;
@@ -589,30 +613,8 @@ const App = (() => {
         </div>`;
     }).join('');
 
-    // ── Horizon S+1 à S+3 — cartes résumées (V1.2) ───────────────────────
-    const futureWeeks = (horizonWeeks || []).slice(1, 4); // S+1, S+2, S+3
-    const horizonHtml = futureWeeks.length ? `
-      <div class="divider"></div>
-      <div class="label-xs mb-8">À venir</div>
-      <div class="horizon-note">La semaine suivante est détaillée. Les semaines 3 et 4 sont indicatives — elles s'affinent avec tes retours.</div>
-      ${futureWeeks.map((w, i) => renderHorizonCard(w, i)).join('')}
-    ` : '';
-
-    el.innerHTML = `
-      <div id="feasibility-banner" class="feasibility-banner" style="display:none"></div>
-
-      <div class="week-header">
-        <div class="label-xs mb-4">${week.phase_name || 'Entraînement'}</div>
-        <div class="week-meta-row">
-          <div>
-            <span class="week-volume">${totalH}</span>
-            <span class="week-volume-label"> volume total</span>
-          </div>
-          ${weekTypeBadge}
-        </div>
-        <h1 style="font-size:1.4rem">Semaine ${week.week_number}</h1>
-      </div>
-
+    // ── Barre disciplines — adaptée au sport ──────────────────────────────
+    const discBarHtml = sport === 'triathlon' ? `
       <div class="disc-bar-wrap">
         <div class="bar-track">
           <div class="bar-swim" style="flex:${swimPct}"></div>
@@ -624,11 +626,36 @@ const App = (() => {
           <div class="disc-item"><div class="disc-dot" style="background:var(--bike)"></div><div><div class="disc-name">Vélo</div><div class="disc-time">${minToHours(bikeMin)}</div></div></div>
           <div class="disc-item"><div class="disc-dot" style="background:var(--run)"></div><div><div class="disc-name">Course</div><div class="disc-time">${minToHours(runMin)}</div></div></div>
         </div>
+      </div>` : `
+      <div class="disc-bar-wrap">
+        <div class="bar-track">
+          <div class="bar-run" style="flex:100"></div>
+        </div>
+        <div class="disc-legend">
+          <div class="disc-item"><div class="disc-dot" style="background:var(--run)"></div><div><div class="disc-name">Course à pied</div><div class="disc-time">${minToHours(runMin || totalMin)}</div></div></div>
+        </div>
+      </div>`;
+
+    el.innerHTML = `
+      <div id="feasibility-banner" class="feasibility-banner" style="display:none"></div>
+
+      ${navHtml}
+
+      <div class="week-header">
+        <div class="label-xs mb-4">${week.phase_name || 'Entraînement'}</div>
+        <div class="week-meta-row">
+          <div>
+            <span class="week-volume">${totalH}</span>
+            <span class="week-volume-label"> volume total</span>
+          </div>
+          ${weekTypeBadge}
+        </div>
       </div>
 
-      <div class="label-xs mb-8">Programme — semaine confirmée</div>
+      ${discBarHtml}
+
+      <div class="label-xs mb-8">Programme</div>
       <div class="day-list">${daysHtml}</div>
-      ${horizonHtml}
     `;
   }
 
