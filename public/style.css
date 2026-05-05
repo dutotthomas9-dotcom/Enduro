@@ -699,3 +699,113 @@ textarea.comment-field {
 
 .flex-row  { display: flex; align-items: center; gap: 8px; }
 .flex-between { display: flex; align-items: center; justify-content: space-between; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ENDURO V1.2 — Composants additionnels
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Bannière faisabilité évolutive ─────────────────────────────── */
+.feasibility-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--r-card);
+  padding: 10px 13px;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.feasibility-icon {
+  flex-shrink: 0;
+  font-size: 10px;
+  margin-top: 3px;
+}
+.feasibility-text { flex: 1; }
+
+.feasibility-ok {
+  background: var(--bike-bg);
+  border: 0.5px solid rgba(15, 110, 86, 0.2);
+  color: #085041;
+}
+.feasibility-warn {
+  background: var(--run-bg);
+  border: 0.5px solid rgba(133, 79, 11, 0.2);
+  color: #412402;
+}
+.feasibility-risk {
+  background: #FCEBEB;
+  border: 0.5px solid rgba(163, 45, 45, 0.18);
+  color: #791F1F;
+}
+
+/* ── Zone badge V1.2 ─────────────────────────────────────────────── */
+.zone-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 10px;
+  margin-bottom: 7px;
+  background: var(--bg-2);
+  color: var(--text-mid);
+  border: 0.5px solid var(--border);
+}
+
+/* ── Chip target — sous-label "indicatif" (V1.2) ─────────────────── */
+.target-chip-sub {
+  font-size: 0.62rem;
+  color: var(--text-hint);
+  margin-top: 1px;
+}
+
+/* ── Horizon 4 semaines ──────────────────────────────────────────── */
+.horizon-note {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  line-height: 1.5;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.horizon-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 11px 13px;
+  cursor: default;
+  transition: border-color 0.12s;
+}
+.horizon-card[onclick] { cursor: pointer; }
+.horizon-card[onclick]:hover { border-color: var(--border-mid); }
+
+.horizon-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+
+.horizon-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.horizon-label-probable {
+  background: var(--bike-bg);
+  color: #085041;
+}
+.horizon-label-indicative {
+  background: var(--bg-3);
+  color: var(--text-light);
+}
+
+.horizon-phase {
+  font-size: 0.78rem;
+  color: var(--text-light);
+}

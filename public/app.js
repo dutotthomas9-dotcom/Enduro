@@ -489,7 +489,8 @@ const App = (() => {
       const current = await api('GET', '/plans/current');
       if (!current) { showScreen('01'); renderScreen01(); return; }
 
-      state.currentWeek = current.current_week;
+      state.currentWeek    = current.current_week;
+      state.horizonWeeks   = current.horizon_weeks || [];
 
       // Nom du plan dans la nav
       const planLabel = document.getElementById('plan-name');
@@ -500,16 +501,43 @@ const App = (() => {
       if (!current.current_week) { el.innerHTML = '<p class="text-muted empty-state">Plan en cours de chargement…</p>'; return; }
 
       const weekData = await api('GET', `/weeks/${current.current_week.id}`);
-      renderWeekView(weekData, current.plan);
+
+      // ── Faisabilité évolutive (V1.2) — appelée silencieusement ──────────
+      // On ne bloque pas l'affichage, on enrichit après
+      api('POST', '/plans/feasibility', {}).then(feasibility => {
+        state.feasibility = feasibility;
+        renderFeasibilityBanner(feasibility);
+      }).catch(() => {});
+
+      renderWeekView(weekData, current.plan, state.horizonWeeks);
     } catch (e) {
       el.innerHTML = `<p class="text-muted empty-state">Impossible de charger le plan : ${e.message}</p>`;
     }
   }
 
-  function renderWeekView(week, plan) {
+  // ── Bannière faisabilité évolutive (V1.2) ─────────────────────────────────
+  function renderFeasibilityBanner(feasibility) {
+    const el = document.getElementById('feasibility-banner');
+    if (!el) return;
+
+    const state_map = {
+      coherent: { cls: 'feasibility-ok',   icon: '✦', text: feasibility.message },
+      ambitious:{ cls: 'feasibility-warn', icon: '◆', text: feasibility.message },
+      risky:    { cls: 'feasibility-risk', icon: '▲', text: feasibility.message },
+    };
+    const cfg = state_map[feasibility.state] || state_map.coherent;
+
+    el.className = `feasibility-banner ${cfg.cls}`;
+    el.innerHTML = `
+      <span class="feasibility-icon">${cfg.icon}</span>
+      <span class="feasibility-text">${cfg.text}</span>
+    `;
+    el.style.display = 'flex';
+  }
+
+  function renderWeekView(week, plan, horizonWeeks) {
     const el = document.getElementById('screen-05-content');
 
-    // Volumes par discipline
     const sessions = week.sessions || [];
     const swimMin = sessions.filter(s => s.discipline === 'swim').reduce((a, s) => a + (s.duration_minutes || 0), 0);
     const bikeMin = sessions.filter(s => s.discipline === 'bike' || s.discipline === 'brick').reduce((a, s) => a + Math.round((s.duration_minutes || 0) * (s.discipline === 'brick' ? 0.6 : 1)), 0);
@@ -519,8 +547,7 @@ const App = (() => {
     const swimPct  = totalMin ? Math.round(swimMin / totalMin * 100) : 20;
     const bikePct  = totalMin ? Math.round(bikeMin / totalMin * 100) : 50;
     const runPct   = 100 - swimPct - bikePct;
-
-    const today = new Date().toISOString().split('T')[0];
+    const today    = new Date().toISOString().split('T')[0];
 
     const weekTypeBadge = week.week_type === 'recovery'
       ? `<span class="tag tag-rest">Récupération</span>`
@@ -528,24 +555,21 @@ const App = (() => {
       ? `<span class="tag tag-rest">Affûtage</span>`
       : '';
 
+    // ── Séances S confirmées ─────────────────────────────────────────────
     const daysHtml = sessions.map(s => {
       const sessionDate = new Date(s.date);
       const isToday = s.date === today;
       const isDone  = s.feedback_status === 'done' || s.feedback_status === 'partial';
       const dayAbbr = sessionDate.toLocaleDateString('fr-FR', { weekday: 'short' });
       const dayNum  = sessionDate.getDate();
-
-      const stripeClass = `stripe-${s.discipline}`;
-      const cardClass   = `day-card ${isToday ? 'today' : ''} ${isDone ? 'done' : ''}`;
+      const cardClass = `day-card ${isToday ? 'today' : ''} ${isDone ? 'done' : ''}`;
       const dayAbbrColor = isToday ? `style="color:var(--${s.discipline === 'rest' ? 'text-light' : s.discipline})"` : '';
-
       const typePill = s.discipline === 'rest' ? '' : `<span class="tag tag-${sessionTypeToTagClass(s.session_type)}" style="font-size:0.65rem">${sessionTypeLabel(s.session_type)}</span>`;
-
-      const dur = s.duration_minutes ? `${s.duration_minutes < 60 ? s.duration_minutes + ' min' : minToHours(s.duration_minutes)}` : '';
+      const dur = s.duration_minutes ? minToHours(s.duration_minutes) : '';
 
       return `
         <div class="${cardClass}" onclick="App.openSession(${s.id})">
-          <div class="day-stripe ${stripeClass}"></div>
+          <div class="day-stripe stripe-${s.discipline}"></div>
           <div class="day-inner">
             <div class="day-label">
               <div class="day-abbr" ${dayAbbrColor}>${dayAbbr}</div>
@@ -565,7 +589,18 @@ const App = (() => {
         </div>`;
     }).join('');
 
+    // ── Horizon S+1 à S+3 — cartes résumées (V1.2) ───────────────────────
+    const futureWeeks = (horizonWeeks || []).slice(1, 4); // S+1, S+2, S+3
+    const horizonHtml = futureWeeks.length ? `
+      <div class="divider"></div>
+      <div class="label-xs mb-8">À venir</div>
+      <div class="horizon-note">La semaine suivante est détaillée. Les semaines 3 et 4 sont indicatives — elles s'affinent avec tes retours.</div>
+      ${futureWeeks.map((w, i) => renderHorizonCard(w, i)).join('')}
+    ` : '';
+
     el.innerHTML = `
+      <div id="feasibility-banner" class="feasibility-banner" style="display:none"></div>
+
       <div class="week-header">
         <div class="label-xs mb-4">${week.phase_name || 'Entraînement'}</div>
         <div class="week-meta-row">
@@ -585,24 +620,52 @@ const App = (() => {
           <div class="bar-run"  style="flex:${runPct}"></div>
         </div>
         <div class="disc-legend">
-          <div class="disc-item">
-            <div class="disc-dot" style="background:var(--swim)"></div>
-            <div><div class="disc-name">Natation</div><div class="disc-time">${minToHours(swimMin)}</div></div>
-          </div>
-          <div class="disc-item">
-            <div class="disc-dot" style="background:var(--bike)"></div>
-            <div><div class="disc-name">Vélo</div><div class="disc-time">${minToHours(bikeMin)}</div></div>
-          </div>
-          <div class="disc-item">
-            <div class="disc-dot" style="background:var(--run)"></div>
-            <div><div class="disc-name">Course</div><div class="disc-time">${minToHours(runMin)}</div></div>
-          </div>
+          <div class="disc-item"><div class="disc-dot" style="background:var(--swim)"></div><div><div class="disc-name">Natation</div><div class="disc-time">${minToHours(swimMin)}</div></div></div>
+          <div class="disc-item"><div class="disc-dot" style="background:var(--bike)"></div><div><div class="disc-name">Vélo</div><div class="disc-time">${minToHours(bikeMin)}</div></div></div>
+          <div class="disc-item"><div class="disc-dot" style="background:var(--run)"></div><div><div class="disc-name">Course</div><div class="disc-time">${minToHours(runMin)}</div></div></div>
         </div>
       </div>
 
-      <div class="label-xs mb-8">Programme</div>
+      <div class="label-xs mb-8">Programme — semaine confirmée</div>
       <div class="day-list">${daysHtml}</div>
+      ${horizonHtml}
     `;
+  }
+
+  // ── Carte d'horizon (S+1 détaillée, S+2/S+3 en résumé) (V1.2) ───────────
+  function renderHorizonCard(week, index) {
+    // index 0 = S+1 (probable, détaillée), 1–2 = S+2/S+3 (indicatives, cartes)
+    const opacity = index === 0 ? '1' : index === 1 ? '0.72' : '0.45';
+    const label   = index === 0 ? 'Probable' : 'Indicative';
+    const labelCls= index === 0 ? 'horizon-label-probable' : 'horizon-label-indicative';
+    const weekVol = week.target_volume_minutes ? minToHours(week.target_volume_minutes) : '—';
+
+    const weekTypeBadge = week.week_type === 'recovery' ? 'Récupération' : week.week_type === 'taper' ? 'Affûtage' : 'Charge';
+
+    return `
+      <div class="horizon-card" style="opacity:${opacity};margin-bottom:7px" ${index === 0 ? `onclick="App.loadWeekDetail(${week.id})"` : ''}>
+        <div class="horizon-card-head">
+          <div>
+            <span class="label-xs">Semaine ${week.week_number}</span>
+            <span class="horizon-badge ${labelCls}">${label}</span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--text-light)">${weekVol}</div>
+        </div>
+        <div class="horizon-phase">${week.phase_name || ''} · ${weekTypeBadge}</div>
+      </div>`;
+  }
+
+  // ── Ouvrir une semaine future en détail (S+1) ────────────────────────────
+  async function loadWeekDetail(weekId) {
+    showScreen('05');
+    const el = document.getElementById('screen-05-content');
+    el.innerHTML = '<div class="loader"><div class="loader-ring"></div></div>';
+    try {
+      const weekData = await api('GET', `/weeks/${weekId}`);
+      renderWeekView(weekData, state.me?.objective || {}, state.horizonWeeks || []);
+    } catch(e) {
+      el.innerHTML = `<p class="text-muted">${e.message}</p>`;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -653,11 +716,14 @@ const App = (() => {
       const iconClass = i === 0 ? 'bloc-icon-warm' : i === blocks.length - 1 ? 'bloc-icon-cool' : 'bloc-icon-main';
       const dur = b.duration_min ? (b.duration_min >= 60 ? `${Math.floor(b.duration_min/60)}h${b.duration_min%60>0?String(b.duration_min%60).padStart(2,'0'):''}` : `${b.duration_min} min`) : '';
 
-      const targetsHtml = (b.target_pace || b.target_hr || b.target_power) ? `
+      // V1.2 — zone_label affiché en badge avant les cibles
+      const zoneBadge = b.zone_label
+        ? `<div class="zone-badge">${b.zone_label}</div>` : '';
+
+      const targetsHtml = (b.target_pace || b.target_hr) ? `
         <div class="target-row">
           ${b.target_pace ? `<div class="target-chip"><div class="target-chip-label">Allure</div><div class="target-chip-val">${b.target_pace}</div></div>` : ''}
-          ${b.target_hr   ? `<div class="target-chip"><div class="target-chip-label">Cœur</div><div class="target-chip-val">${b.target_hr}</div></div>` : ''}
-          ${b.target_power? `<div class="target-chip"><div class="target-chip-label">Puissance</div><div class="target-chip-val">${b.target_power}</div></div>` : ''}
+          ${b.target_hr   ? `<div class="target-chip"><div class="target-chip-label">Fréquence cardiaque</div><div class="target-chip-val">${b.target_hr}</div><div class="target-chip-sub">indicatif</div></div>` : ''}
         </div>` : '';
 
       const recupHtml = b.recovery ? `
@@ -677,9 +743,10 @@ const App = (() => {
             </div>
             <div class="bloc-dur">${dur}</div>
           </div>
-          ${b.description || targetsHtml || recupHtml ? `
+          ${b.description || zoneBadge || targetsHtml || recupHtml ? `
           <div class="bloc-body">
             ${b.reps ? `<div class="reps-badge">${b.reps}</div>` : ''}
+            ${zoneBadge}
             ${b.description ? `<div class="bloc-desc">${b.description}</div>` : ''}
             ${targetsHtml}
             ${recupHtml}
@@ -1024,7 +1091,7 @@ const App = (() => {
     selectGoalType, goToOnboarding,
     onboardingBack, onboardingNext, onboardingSkip,
     obSelectOpt, obToggleTag, obInput,
-    generatePlan, loadAndShowWeek,
+    generatePlan, loadAndShowWeek, loadWeekDetail,
     openSession, openFeedback,
     fbSelectStatus, fbSetRpe, fbSetPain, fbToggleZone, fbSetComment,
     submitFeedback, acceptAdaptation, rejectAdaptation,

@@ -46,13 +46,16 @@ function getPhaseForWeek(weekIndex, blocks) {
   return blocks[blocks.length - 1];
 }
 
-// ─── CALCUL DES ZONES DE L'ATHLÈTE ───────────────────────────────────────────
+// ─── CALCUL DES ZONES DE L'ATHLÈTE (V1.2) ────────────────────────────────────
+// V1.2 : zones exprimées en langage humain d'abord, bpm indicatifs ensuite.
+// FTP et CSS : supprimés de l'affichage (reportés V2).
 
 function computeZones(athlete) {
   const hrMax = athlete.hr_max || 185;
+  const hasHr = !!athlete.hr_max;
 
-  // Zones de fréquence cardiaque
-  const hr = {
+  // Bpm calculés — utilisés uniquement si hr_max est renseigné
+  const bpm = {
     z1: [Math.round(hrMax * 0.60), Math.round(hrMax * 0.65)],
     z2: [Math.round(hrMax * 0.65), Math.round(hrMax * 0.75)],
     z3: [Math.round(hrMax * 0.75), Math.round(hrMax * 0.83)],
@@ -60,30 +63,32 @@ function computeZones(athlete) {
     z5: [Math.round(hrMax * 0.90), Math.round(hrMax * 0.96)],
   };
 
-  // Allures CAP (secondes/km)
+  // Zones avec libellé humain (V1.2) — format affiché dans les blocs
+  function zoneLabel(z) {
+    const labels = {
+      z1: 'Zone 1 — récupération active',
+      z2: 'Zone 2 — endurance confortable',
+      z3: 'Zone 3 — tempo contrôlé',
+      z4: 'Zone 4 — seuil soutenu',
+      z5: 'Zone 5 — effort maximal court',
+    };
+    const base = labels[z] || z;
+    if (!hasHr) return base;
+    return `${base} (~${bpm[z][0]}–${bpm[z][1]} bpm)`;
+  }
+
+  // Raccourci : zones pour les blocs
+  const hr = bpm; // compatibilité avec le code existant qui lit zones.hr.zX
+
+  // Allures CAP — calculées depuis l'allure 10k (pas depuis CSS)
   let runZ2 = null, runZ4 = null;
   if (athlete.run_10k_pace_seconds) {
     const p = athlete.run_10k_pace_seconds;
-    runZ2 = secToPace(Math.round(p * 1.22));
-    runZ4 = secToPace(Math.round(p * 1.04));
+    runZ2 = `${secToPace(Math.round(p * 1.22))} /km`;
+    runZ4 = `${secToPace(Math.round(p * 1.04))} /km`;
   }
 
-  // CSS natation (s/100m)
-  let swimZ2 = null, swimZ4 = null;
-  if (athlete.swim_css_seconds) {
-    const c = athlete.swim_css_seconds;
-    swimZ2 = `${secToPace(Math.round(c * 1.18))}/100m`;
-    swimZ4 = `${secToPace(Math.round(c * 1.04))}/100m`;
-  }
-
-  // FTP vélo
-  let bikeZ2 = null, bikeZ4 = null;
-  if (athlete.ftp_watts) {
-    bikeZ2 = `${Math.round(athlete.ftp_watts * 0.68)}–${Math.round(athlete.ftp_watts * 0.76)} W`;
-    bikeZ4 = `${Math.round(athlete.ftp_watts * 0.88)}–${Math.round(athlete.ftp_watts * 0.95)} W`;
-  }
-
-  return { hr, runZ2, runZ4, swimZ2, swimZ4, bikeZ2, bikeZ4 };
+  return { hr, bpm, hasHr, zoneLabel, runZ2, runZ4 };
 }
 
 function secToPace(sec) {
@@ -106,56 +111,129 @@ function buildRestSession(date) {
   };
 }
 
+// ─── SÉANCES NATATION V1.2 ───────────────────────────────────────────────────
+// Chaque séance inclut 1–2 éducatifs universels.
+// Zéro CSS, zéro chrono au mètre, zéro jargon expert.
+// Structure : échauffement → éducatif → nage / séries → retour au calme.
+
+const SWIM_EDUCATIFS = {
+  rattrapé: {
+    name: 'Éducatif — rattrapé',
+    description: 'Nage avec un seul bras à la fois, l\'autre tendu devant dans le prolongement du corps. Attends que ta main tendue "rattrape" le mouvement avant de changer. Objectif : sentir le placement de ta main avant de tirer.',
+  },
+  un_bras: {
+    name: 'Éducatif — un bras',
+    description: 'Même principe : un seul bras nage, l\'autre reste immobile le long du corps. Concentre-toi sur la rotation du bassin et l\'allongement du corps.',
+  },
+  battements: {
+    name: 'Éducatif — battements',
+    description: 'Planche en main, jambes seules. Battements réguliers, chevilles relâchées. L\'effort vient des hanches, pas des genoux. Ce n\'est pas une compétition — c\'est de l\'observation.',
+  },
+  bilateral: {
+    name: 'Éducatif — respiration bilatérale',
+    description: 'Nage normalement, mais respire alternativement à droite et à gauche toutes les 3 nages. Ça déséquilibre au début — c\'est exactement l\'objectif : équilibrer ta technique.',
+  },
+};
+
 function buildSwimSession(type, durationMin, zones, date) {
+  const z = zones.zoneLabel;
+
   const templates = {
     endurance: {
       name: 'Natation endurance',
       session_type: 'endurance',
-      coach_intro: 'Séance de fond. L\'objectif est de nager longtemps à une allure où tu te sens à l\'aise, pas de te fatiguer.',
-      session_goal: 'Construire ta base aérobie en eau. La régularité compte plus que l\'intensité.',
+      coach_intro: 'Séance de fond. L\'objectif est de nager longtemps à une allure où tu te sens à l\'aise — pas de te fatiguer. On ajoute un éducatif en début de séance pour travailler ta technique pendant que les bras sont encore frais.',
+      session_goal: 'Construire ta base aérobie en eau. La régularité compte plus que l\'intensité. Nager longtemps à allure confortable vaut mieux que nager vite et arriver épuisé sur le vélo.',
       blocks: [
-        { name: 'Échauffement', duration_min: Math.round(durationMin * 0.18),
-          intensity: 'Z1-Z2', description: '400m en nage libre, très facile. Sens l\'eau, pas de chrono.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z1[1]} bpm`,
-          target_pace: zones.swimZ2 || 'allure confortable' },
-        { name: 'Corps de séance', duration_min: Math.round(durationMin * 0.64),
-          intensity: 'Z2', description: 'Nage continue en endurance. Tu dois pouvoir te concentrer sur ta technique entre chaque respiration.',
-          target_hr: `${zones.hr.z2[0]}–${zones.hr.z2[1]} bpm`,
-          target_pace: zones.swimZ2 || 'allure soutenue mais confortable' },
-        { name: 'Retour au calme', duration_min: Math.round(durationMin * 0.18),
-          intensity: 'Z1', description: '200m dos ou crawl très lent. Laisse ta fréquence cardiaque redescendre.',
-          target_hr: `< ${zones.hr.z1[1]} bpm` },
+        {
+          name: 'Échauffement',
+          duration_min: Math.round(durationMin * 0.16),
+          zone_label: z('z1'),
+          description: '300–400m en nage libre très facile. Sens l\'eau, pas de chrono. Relâche les épaules.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z1[1]} bpm` : null,
+        },
+        {
+          ...SWIM_EDUCATIFS.rattrapé,
+          duration_min: Math.round(durationMin * 0.12),
+          zone_label: z('z1'),
+          description: SWIM_EDUCATIFS.rattrapé.description + ' · 4 × 25m, récupération 15 secondes.',
+          reps: '4 × 25m', recovery: '15 s',
+        },
+        {
+          name: 'Nage continue endurance',
+          duration_min: Math.round(durationMin * 0.55),
+          zone_label: z('z2'),
+          description: 'Nage continue. Tu dois pouvoir te concentrer sur ta technique entre chaque respiration. Si tu t\'épuises, c\'est que le rythme est trop soutenu.',
+          target_hr: zones.hasHr ? `${zones.bpm.z2[0]}–${zones.bpm.z2[1]} bpm` : null,
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: Math.round(durationMin * 0.17),
+          zone_label: z('z1'),
+          description: '200m dos ou crawl très lent. Laisse ta fréquence cardiaque redescendre. Relâche les épaules et les mâchoires.',
+          target_hr: zones.hasHr ? `< ${zones.bpm.z1[1]} bpm` : null,
+        },
       ],
     },
+
     technique_threshold: {
-      name: 'Technique + seuil CSS',
+      name: 'Natation technique + effort soutenu',
       session_type: 'threshold',
-      coach_intro: 'Séance qualité en natation. La première partie travaille ta technique, la seconde ton moteur aérobie.',
-      session_goal: 'Améliorer ton économie de nage et ta capacité à tenir un effort soutenu — les deux comptent sur un triathlon.',
+      coach_intro: 'Séance en deux temps : on travaille d\'abord la technique pendant que tu es frais, puis l\'effort. La technique se perd dès que tu es fatigué — c\'est pour ça qu\'on la met en premier.',
+      session_goal: 'Améliorer ton économie de nage et ta capacité à tenir un effort soutenu — les deux comptent en triathlon.',
       blocks: [
-        { name: 'Échauffement + éducatifs', duration_min: Math.round(durationMin * 0.22),
-          intensity: 'Z1-Z2', description: '400m en nage libre facile, puis 4×50m d\'éducatifs (rattrapé, unilatéral). Concentration sur le placement du bras.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[0]} bpm` },
-        { name: 'Séries seuil', duration_min: Math.round(durationMin * 0.56),
-          intensity: 'Z4', description: '8×100m à ton allure seuil. Récupération 15 secondes entre chaque. L\'effort doit être soutenu mais régulier — même allure sur les 8 séries.',
-          target_hr: `${zones.hr.z4[0]}–${zones.hr.z4[1]} bpm`,
-          target_pace: zones.swimZ4 || 'allure seuil',
-          reps: '8 × 100m', recovery: '15 s récup' },
-        { name: 'Retour au calme', duration_min: Math.round(durationMin * 0.22),
-          intensity: 'Z1', description: '200m très lent. Concentre-toi sur le relâchement des épaules.',
-          target_hr: `< ${zones.hr.z1[1]} bpm` },
+        {
+          name: 'Échauffement',
+          duration_min: Math.round(durationMin * 0.14),
+          zone_label: z('z1'),
+          description: '300m en nage libre facile. Concentre-toi sur le relâchement des épaules.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[0]} bpm` : null,
+        },
+        {
+          name: 'Éducatifs — 2 exercices',
+          duration_min: Math.round(durationMin * 0.16),
+          zone_label: z('z1'),
+          description: `2 × 50m de ${SWIM_EDUCATIFS.rattrapé.name.replace('Éducatif — ', '')} · récupération 15 s, puis 2 × 50m de ${SWIM_EDUCATIFS.bilateral.name.replace('Éducatif — ', '')} · récupération 15 s. Ce n'est pas de la compétition — c'est de l'observation.`,
+          reps: '4 × 50m', recovery: '15 s entre chaque',
+        },
+        {
+          name: 'Séries effort soutenu',
+          duration_min: Math.round(durationMin * 0.52),
+          zone_label: z('z4'),
+          description: `Effort soutenu mais régulier. L'allure doit être identique sur toutes les répétitions — si tu t\'effondres sur les dernières, tu es parti trop fort. Récupération 20 secondes entre chaque série.`,
+          target_hr: zones.hasHr ? `${zones.bpm.z4[0]}–${zones.bpm.z4[1]} bpm` : null,
+          reps: `${Math.round(durationMin * 0.52 / 10)} × 100m`, recovery: '20 s',
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: Math.round(durationMin * 0.18),
+          zone_label: z('z1'),
+          description: '200m très lent. Concentre-toi sur le relâchement des épaules et des mâchoires.',
+          target_hr: zones.hasHr ? `< ${zones.bpm.z1[1]} bpm` : null,
+        },
       ],
     },
+
     recovery: {
       name: 'Natation récupération',
       session_type: 'recovery',
-      coach_intro: 'Séance légère. L\'objectif est de maintenir le rythme de nage sans créer de fatigue supplémentaire.',
-      session_goal: 'Entretenir ta technique et favoriser la récupération active après les efforts de la semaine.',
+      coach_intro: 'Séance très légère. L\'objectif est de maintenir le rythme de nage sans créer de fatigue supplémentaire. Si tu te sens fatigué en entrant dans l\'eau, c\'est un bon signe — cette séance est faite pour toi.',
+      session_goal: 'Entretenir la sensation de l\'eau et favoriser la récupération active. Une séance facile bien réalisée vaut mieux qu\'une séance ambitieuse sabotée par la fatigue.',
       blocks: [
-        { name: 'Nage libre facile', duration_min: durationMin,
-          intensity: 'Z1-Z2', description: 'Nage continue, allure très confortable. Focus sur la technique : allongement du corps, entrée de main dans l\'axe. Aucune urgence.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[0]} bpm`,
-          target_pace: zones.swimZ2 || 'allure très confortable' },
+        {
+          ...SWIM_EDUCATIFS.battements,
+          duration_min: Math.round(durationMin * 0.20),
+          zone_label: z('z1'),
+          description: SWIM_EDUCATIFS.battements.description + ' · 4 × 25m, récupération libre.',
+          reps: '4 × 25m', recovery: 'à ton rythme',
+        },
+        {
+          name: 'Nage libre très facile',
+          duration_min: Math.round(durationMin * 0.80),
+          zone_label: z('z1'),
+          description: 'Nage continue, allure conversationnelle. Focus sur l\'allongement du corps et l\'entrée de main dans l\'axe. Aucune urgence.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[0]} bpm` : null,
+        },
       ],
     },
   };
@@ -173,65 +251,143 @@ function buildSwimSession(type, durationMin, zones, date) {
   };
 }
 
+// ─── SÉANCES VÉLO V1.2 ───────────────────────────────────────────────────────
+// Trois types distincts : endurance / tempo / seuil.
+// Intensité exprimée : ressenti d'abord, zone + bpm ensuite (si disponibles).
+// FTP : jamais affiché, jamais demandé.
+
 function buildBikeSession(type, durationMin, zones, date) {
+  const z = zones.zoneLabel;
+
+  const mainDur = Math.max(20, durationMin - 30);
+  const repCount = Math.max(2, Math.min(5, Math.round(mainDur / 12)));
+
   const templates = {
     endurance: {
       name: 'Vélo endurance fondamentale',
       session_type: 'endurance',
-      coach_intro: 'Sortie en endurance. Le vélo se travaille d\'abord à basse intensité — résiste à l\'envie d\'accélérer.',
-      session_goal: 'Développer ton moteur aérobie et habituer tes jambes à pédaler longtemps. C\'est la base de tout.',
+      coach_intro: 'Sortie en endurance. Le vélo se travaille d\'abord à basse intensité — résiste à l\'envie d\'accélérer. C\'est la séance qui construit les fondations.',
+      session_goal: 'Développer ton moteur aérobie et habituer tes jambes à pédaler longtemps. Sans cette base, les séances qualité ne servent à rien.',
       blocks: [
-        { name: 'Mise en route', duration_min: 15,
-          intensity: 'Z1-Z2', description: 'Pédale très légèrement les 15 premières minutes. Cadence 85–90 rpm, résistance minimale.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[0]} bpm`,
-          target_power: zones.bikeZ2 ? `< ${zones.bikeZ2.split('–')[0]} W` : null },
-        { name: 'Corps de séance', duration_min: durationMin - 25,
-          intensity: 'Z2', description: 'Endurance continue. Tu dois pouvoir chanter ou tenir une conversation. Si tu dois souffler, réduis la résistance.',
-          target_hr: `${zones.hr.z2[0]}–${zones.hr.z2[1]} bpm`,
-          target_power: zones.bikeZ2 || null },
-        { name: 'Retour au calme', duration_min: 10,
-          intensity: 'Z1', description: 'Les 10 dernières minutes en pédalage très léger. Cadence libre, résistance minimale.',
-          target_hr: `< ${zones.hr.z1[1]} bpm` },
+        {
+          name: 'Mise en route',
+          duration_min: 15,
+          zone_label: z('z1'),
+          description: 'Pédale très légèrement. Cadence 85–90 rpm, résistance minimale. Tu dois pouvoir chanter pendant ces 15 premières minutes.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z1[1]} bpm` : null,
+        },
+        {
+          name: 'Endurance continue',
+          duration_min: Math.max(20, durationMin - 25),
+          zone_label: z('z2'),
+          description: 'Pédale à allure conversationnelle du début à la fin. Tu dois pouvoir tenir une longue phrase sans t\'essouffler. Si tu dois souffler pour parler, réduis la résistance. Mange et bois toutes les 20 minutes.',
+          target_hr: zones.hasHr ? `${zones.bpm.z2[0]}–${zones.bpm.z2[1]} bpm` : null,
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: 10,
+          zone_label: z('z1'),
+          description: 'Les 10 dernières minutes en pédalage très léger. Cadence libre, résistance minimale.',
+          target_hr: zones.hasHr ? `< ${zones.bpm.z1[1]} bpm` : null,
+        },
       ],
     },
+
+    tempo: {
+      name: 'Vélo tempo contrôlé',
+      session_type: 'tempo',
+      coach_intro: 'Séance intermédiaire entre l\'endurance et le seuil. L\'effort est soutenu mais maîtrisable — tu peux dire une phrase entière, pas une conversation.',
+      session_goal: 'Travailler la zone entre l\'endurance confortable et le seuil. En triathlon, c\'est souvent à cette intensité que tu passes une bonne partie du vélo.',
+      blocks: [
+        {
+          name: 'Échauffement',
+          duration_min: 15,
+          zone_label: z('z1'),
+          description: 'Pédalage très facile. Monte progressivement en cadence.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[0]} bpm` : null,
+        },
+        {
+          name: 'Effort tempo',
+          duration_min: Math.max(20, durationMin - 25),
+          zone_label: z('z3'),
+          description: 'Effort soutenu et régulier. Tu peux dire une phrase entière, mais tu ne pourrais pas chanter. Résistance constante — évite de varier l\'intensité. Si tu décroches, c\'est que tu es parti trop fort.',
+          target_hr: zones.hasHr ? `${zones.bpm.z3[0]}–${zones.bpm.z3[1]} bpm` : null,
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: 10,
+          zone_label: z('z1'),
+          description: 'Pédale très légèrement. Laisse la fréquence cardiaque redescendre avant d\'arrêter.',
+          target_hr: zones.hasHr ? `< ${zones.bpm.z2[0]} bpm` : null,
+        },
+      ],
+    },
+
     threshold: {
       name: 'Vélo intervalles seuil',
       session_type: 'threshold',
-      coach_intro: 'Séance qualité. Tu vas travailler à l\'intensité qui correspond à ton effort maximal sur 1 heure. C\'est inconfortable — c\'est voulu.',
-      session_goal: 'Améliorer ta puissance seuil. Sur un Ironman, tu passeras 4 à 5 heures juste en-dessous de cette intensité.',
+      coach_intro: 'Séance qualité. Tu vas travailler à l\'intensité qui correspond à ton effort maximal sur environ une heure. C\'est inconfortable — c\'est voulu. L\'effort doit être constant : si tu décroches sur le dernier intervalle, tu es parti trop fort.',
+      session_goal: 'Améliorer ta capacité à soutenir un effort élevé longtemps. En triathlon, c\'est la qualité de cette filière qui détermine ta performance sur le vélo.',
       blocks: [
-        { name: 'Échauffement', duration_min: 20,
-          intensity: 'Z1-Z2', description: 'Pédalage facile, monte progressivement. 2×30 secondes d\'accélération légère à 15 min.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[1]} bpm` },
-        { name: 'Intervalles seuil', duration_min: Math.round(durationMin * 0.55),
-          intensity: 'Z4', description: 'Effort soutenu mais constant. Tu dois tenir l\'allure sur tous les intervalles — si tu décroches sur le dernier, c\'est que tu es parti trop fort.',
-          target_hr: `${zones.hr.z4[0]}–${zones.hr.z4[1]} bpm`,
-          target_power: zones.bikeZ4 || null,
-          reps: `${Math.round(durationMin * 0.55 / 11)} × 8 min`, recovery: '3 min récup facile' },
-        { name: 'Retour au calme', duration_min: 10,
-          intensity: 'Z1', description: 'Pédale très légèrement. Étire les quadriceps après l\'arrêt.',
-          target_hr: `< ${zones.hr.z1[1]} bpm` },
+        {
+          name: 'Échauffement',
+          duration_min: 20,
+          zone_label: z('z1'),
+          description: 'Pédalage facile, monte progressivement en cadence. À 15 min, 2 × 30 secondes d\'accélération légère pour réveiller les jambes.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[1]} bpm` : null,
+        },
+        {
+          name: `${repCount} × 8 min seuil`,
+          duration_min: Math.round(durationMin * 0.55),
+          zone_label: z('z4'),
+          description: 'Effort dur et régulier. Tu peux dire trois mots, pas plus. La résistance reste constante sur les 8 minutes — pas de sprint, pas de relâche. Récupération 3 min de pédalage très léger entre chaque.',
+          target_hr: zones.hasHr ? `${zones.bpm.z4[0]}–${zones.bpm.z4[1]} bpm` : null,
+          reps: `${repCount} × 8 min`, recovery: '3 min pédalage léger',
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: 10,
+          zone_label: z('z1'),
+          description: 'Pédale très légèrement. Étire les quadriceps après l\'arrêt complet.',
+          target_hr: zones.hasHr ? `< ${zones.bpm.z1[1]} bpm` : null,
+        },
       ],
     },
+
     long_ride: {
       name: 'Sortie longue vélo',
       session_type: 'long',
-      coach_intro: 'C\'est LA séance de la semaine. Elle simule la partie vélo de ta course. Gère ton effort et ton alimentation dès le départ.',
-      session_goal: 'Habituer ton corps et ton mental à pédaler longtemps. La gestion de l\'énergie et de l\'hydratation s\'apprend ici.',
+      coach_intro: 'C\'est LA séance de la semaine. Elle simule la partie vélo de ta course. La gestion de l\'effort et de l\'alimentation se travaille ici — pas le jour J.',
+      session_goal: 'Habituer ton corps et ton mental à pédaler longtemps. L\'énergie et l\'hydratation s\'apprennent à l\'entraînement.',
       blocks: [
-        { name: 'Échauffement', duration_min: 20,
-          intensity: 'Z1-Z2', description: 'Montée en température progressive sur les premiers kilomètres. Résiste à l\'envie de partir fort.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[0]} bpm` },
-        { name: 'Corps de séance — endurance', duration_min: Math.round(durationMin * 0.65),
-          intensity: 'Z2', description: 'Endurance continue. Mange et bois régulièrement — toutes les 20 minutes minimum. Ne pas attendre d\'avoir faim ou soif.',
-          target_hr: `${zones.hr.z2[0]}–${zones.hr.z2[1]} bpm`,
-          target_power: zones.bikeZ2 || null },
-        { name: 'Bloc seuil inclus', duration_min: 20,
-          intensity: 'Z3-Z4', description: '20 min à allure légèrement plus soutenue en milieu de sortie. Sens comment tu réagis à l\'effort quand les jambes sont déjà chargées.',
-          target_hr: `${zones.hr.z3[0]}–${zones.hr.z4[0]} bpm` },
-        { name: 'Retour au calme', duration_min: 15,
-          intensity: 'Z1-Z2', description: 'Réduis progressivement. Les 10 derniers km très légers.',
-          target_hr: `${zones.hr.z1[0]}–${zones.hr.z2[0]} bpm` },
+        {
+          name: 'Mise en route',
+          duration_min: 20,
+          zone_label: z('z1'),
+          description: 'Montée en température progressive. Résiste à l\'envie de partir fort — les premières minutes définissent le reste de la sortie.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[0]} bpm` : null,
+        },
+        {
+          name: 'Corps de séance — endurance',
+          duration_min: Math.round(durationMin * 0.62),
+          zone_label: z('z2'),
+          description: 'Allure conversationnelle continue. Mange toutes les 20 minutes, bois toutes les 15 minutes — ne pas attendre d\'avoir faim ou soif. C\'est une compétence à part entière.',
+          target_hr: zones.hasHr ? `${zones.bpm.z2[0]}–${zones.bpm.z2[1]} bpm` : null,
+        },
+        {
+          name: 'Bloc tempo inclus',
+          duration_min: 20,
+          zone_label: z('z3'),
+          description: '20 min légèrement plus soutenues au milieu de la sortie. Sens comment tu réagis à l\'effort quand les jambes sont déjà chargées — c\'est exactement ce qui se passe en course.',
+          target_hr: zones.hasHr ? `${zones.bpm.z3[0]}–${zones.bpm.z3[1]} bpm` : null,
+        },
+        {
+          name: 'Retour au calme',
+          duration_min: 15,
+          zone_label: z('z1'),
+          description: 'Réduis progressivement. Les 10 derniers km très légers.',
+          target_hr: zones.hasHr ? `${zones.bpm.z1[0]}–${zones.bpm.z2[0]} bpm` : null,
+        },
       ],
     },
   };
@@ -242,8 +398,8 @@ function buildBikeSession(type, durationMin, zones, date) {
     name: t.name, date, day_of_week: date.getDay(),
     duration_minutes: durationMin,
     distance_km: Math.round(durationMin * 0.58 * 10) / 10,
-    tss_estimated: Math.round(durationMin * (type === 'threshold' ? 1.5 : type === 'long_ride' ? 1.1 : 0.8)),
-    rpe_target: type === 'threshold' ? 8 : type === 'long_ride' ? 6 : 5,
+    tss_estimated: Math.round(durationMin * (type === 'threshold' ? 1.5 : type === 'long_ride' ? 1.1 : type === 'tempo' ? 1.2 : 0.8)),
+    rpe_target: type === 'threshold' ? 8 : type === 'long_ride' ? 6 : type === 'tempo' ? 7 : 5,
     coach_intro: t.coach_intro, session_goal: t.session_goal,
     blocks: JSON.stringify(t.blocks),
   };

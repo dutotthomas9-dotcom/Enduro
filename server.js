@@ -14,6 +14,7 @@ const initSqlJs = require('sql.js');
 
 const { generatePlan, analyzeFeasibility } = require('./engine/generator');
 const { computeAdaptation }                = require('./engine/adaptation');
+const { computeEvolvingFeasibility, evaluatePaceVsTarget } = require('./engine/feasibility');
 
 const app      = express();
 const PORT     = process.env.PORT     || 3000;
@@ -200,6 +201,20 @@ async function initDb() {
   )`);
 
   saveDb();
+
+  // ── Migrations V1.2 (non-destructives — ALTER TABLE IF NOT EXISTS) ───────
+  // SQLite n'a pas de "ADD COLUMN IF NOT EXISTS" natif — on gère l'erreur.
+  const v12columns = [
+    `ALTER TABLE objectives ADD COLUMN target_time_sec INTEGER`,
+    `ALTER TABLE objectives ADD COLUMN evolving_state TEXT DEFAULT 'coherent'`,
+    `ALTER TABLE objectives ADD COLUMN evolving_message TEXT`,
+    `ALTER TABLE objectives ADD COLUMN evolving_updated_at TEXT`,
+    `ALTER TABLE sessions ADD COLUMN zone_horizon TEXT DEFAULT 'confirmed'`,
+  ];
+  for (const sql of v12columns) {
+    try { _db.run(sql); } catch { /* colonne déjà existante */ }
+  }
+  saveDb();
 }
 
 // ─── MIDDLEWARE AUTH ──────────────────────────────────────────────────────────
@@ -377,21 +392,73 @@ app.post('/api/plans/generate', auth, (req, res) => {
 });
 
 app.get('/api/plans/current', auth, (req, res) => {
-  const plan = db.prepare(`SELECT p.*, o.discipline, o.race_name, o.race_date, o.feasibility_verdict
+  const plan = db.prepare(`SELECT p.*, o.discipline, o.race_name, o.race_date,
+    o.feasibility_verdict, o.evolving_state, o.evolving_message, o.feasibility_message,
+    o.target_time_sec, o.id as objective_id
     FROM plans p, objectives o
     WHERE p.objective_id = o.id AND p.athlete_id = ? AND p.status = 'active'
     ORDER BY p.id DESC LIMIT 1`).get(req.athlete.id);
 
   if (!plan) return res.json(null);
 
-  const today   = new Date().toISOString().split('T')[0];
-  let week = db.prepare(`SELECT * FROM weeks WHERE plan_id = ? AND start_date <= ? ORDER BY start_date DESC LIMIT 1`)
-    .get(plan.id, today);
-  if (!week) {
-    week = db.prepare('SELECT * FROM weeks WHERE plan_id = ? ORDER BY week_number LIMIT 1').get(plan.id);
+  const today = new Date().toISOString().split('T')[0];
+  let currentWeek = db.prepare(
+    `SELECT * FROM weeks WHERE plan_id = ? AND start_date <= ? ORDER BY start_date DESC LIMIT 1`
+  ).get(plan.id, today);
+  if (!currentWeek) {
+    currentWeek = db.prepare('SELECT * FROM weeks WHERE plan_id = ? ORDER BY week_number LIMIT 1').get(plan.id);
   }
 
-  res.json({ plan, current_week: week || null });
+  // ── Semaines S à S+3 pour la vue 4 semaines ────────────────────────────
+  const allWeeks = db.prepare(
+    `SELECT * FROM weeks WHERE plan_id = ? ORDER BY week_number`
+  ).all(plan.id);
+
+  const currentIdx = currentWeek
+    ? allWeeks.findIndex(w => w.id === currentWeek.id)
+    : 0;
+
+  const horizonWeeks = allWeeks.slice(currentIdx, currentIdx + 4).map((w, i) => ({
+    ...w,
+    horizon: i === 0 ? 'confirmed' : i === 1 ? 'probable' : 'indicative',
+    horizon_label: i === 0 ? 'Confirmée' : i === 1 ? 'Probable' : 'Indicative',
+  }));
+
+  res.json({ plan, current_week: currentWeek || null, horizon_weeks: horizonWeeks });
+});
+
+// ─── ROUTE V1.2 : faisabilité évolutive ──────────────────────────────────────
+// Recalcule l'état de faisabilité à partir des feedbacks récents (14 derniers jours).
+// Appelée une fois par semaine depuis le frontend (à l'ouverture de la vue semaine).
+
+app.post('/api/plans/feasibility', auth, (req, res) => {
+  const profile   = db.prepare('SELECT * FROM profiles WHERE athlete_id = ?').get(req.athlete.id);
+  const objective = db.prepare('SELECT * FROM objectives WHERE athlete_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1').get(req.athlete.id);
+  if (!objective) return res.json({ state: 'coherent', message: 'Plan en cours de démarrage.' });
+
+  // Feedbacks des 14 derniers jours
+  const since14 = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString().split('T')[0];
+  const recentFeedbacks = db.prepare(
+    `SELECT f.* FROM feedbacks f WHERE f.athlete_id = ? AND f.created_at >= ? ORDER BY f.created_at`
+  ).all(req.athlete.id, since14);
+
+  const recentSessions = db.prepare(
+    `SELECT * FROM sessions WHERE athlete_id = ? AND date >= ? AND discipline != 'rest'`
+  ).all(req.athlete.id, since14);
+
+  const result = computeEvolvingFeasibility(profile, objective, recentFeedbacks, recentSessions);
+
+  // Persister si l'état a changé
+  if (result.updated) {
+    db.prepare(
+      `UPDATE objectives SET evolving_state=?, evolving_message=?, evolving_updated_at=datetime('now') WHERE id=?`
+    ).run(result.state, result.message, objective.id);
+  }
+
+  // Évaluation allure vs objectif temps (V1.2)
+  const paceEval = evaluatePaceVsTarget(profile, objective);
+
+  res.json({ ...result, pace_eval: paceEval });
 });
 
 app.get('/api/weeks/:weekId', auth, (req, res) => {
