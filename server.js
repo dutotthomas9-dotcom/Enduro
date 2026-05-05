@@ -202,8 +202,7 @@ async function initDb() {
 
   saveDb();
 
-  // ── Migrations V1.2 (non-destructives — ALTER TABLE IF NOT EXISTS) ───────
-  // SQLite n'a pas de "ADD COLUMN IF NOT EXISTS" natif — on gère l'erreur.
+  // ── Migrations V1.2 (non-destructives) ──────────────────────────────────
   const v12columns = [
     `ALTER TABLE objectives ADD COLUMN target_time_sec INTEGER`,
     `ALTER TABLE objectives ADD COLUMN evolving_state TEXT DEFAULT 'coherent'`,
@@ -212,6 +211,18 @@ async function initDb() {
     `ALTER TABLE sessions ADD COLUMN zone_horizon TEXT DEFAULT 'confirmed'`,
   ];
   for (const sql of v12columns) {
+    try { _db.run(sql); } catch { /* colonne déjà existante */ }
+  }
+
+  // ── Migrations V1.21.1 (non-destructives) ────────────────────────────────
+  const v121columns = [
+    `ALTER TABLE weeks ADD COLUMN weekly_km REAL DEFAULT 0`,
+    `ALTER TABLE weeks ADD COLUMN weekly_d_plus INTEGER DEFAULT 0`,
+    `ALTER TABLE weeks ADD COLUMN weekly_dist_m INTEGER DEFAULT 0`,
+    `ALTER TABLE sessions ADD COLUMN distance_m INTEGER DEFAULT 0`,
+    `ALTER TABLE sessions ADD COLUMN d_plus INTEGER DEFAULT 0`,
+  ];
+  for (const sql of v121columns) {
     try { _db.run(sql); } catch { /* colonne déjà existante */ }
   }
   saveDb();
@@ -362,10 +373,12 @@ app.post('/api/plans/generate', auth, (req, res) => {
 
   for (const week of generated.weeks) {
     const weekRow = db.prepare(`INSERT INTO weeks
-      (plan_id, week_number, phase, phase_name, week_type, start_date, target_volume_minutes)
-      VALUES (?,?,?,?,?,?,?)`).run(
+      (plan_id, week_number, phase, phase_name, week_type, start_date,
+       target_volume_minutes, weekly_km, weekly_d_plus, weekly_dist_m)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
       planId, week.week_number, week.phase, week.phase_name,
-      week.week_type, week.start_date, week.target_volume_minutes
+      week.week_type, week.start_date, week.target_volume_minutes,
+      week.weekly_km || 0, week.weekly_d_plus || 0, week.weekly_dist_m || 0
     );
     const weekId = weekRow.lastInsertRowid;
 
@@ -376,12 +389,13 @@ app.post('/api/plans/generate', auth, (req, res) => {
 
       db.prepare(`INSERT INTO sessions
         (week_id, plan_id, athlete_id, date, day_of_week, discipline, session_type,
-         name, duration_minutes, distance_km, tss_estimated, rpe_target,
-         blocks, coach_intro, session_goal)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+         name, duration_minutes, distance_km, distance_m, d_plus,
+         tss_estimated, rpe_target, blocks, coach_intro, session_goal)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         weekId, planId, req.athlete.id, sessionDate,
         s.day_of_week || 0, s.discipline, s.session_type,
         s.name, s.duration_minutes || 0, s.distance_km || 0,
+        s.distance_m || 0, s.d_plus || 0,
         s.tss_estimated || 0, s.rpe_target || 5,
         s.blocks || '[]', s.coach_intro || '', s.session_goal || ''
       );
@@ -568,7 +582,16 @@ app.post('/api/sessions/:id/feedback', auth, (req, res) => {
   const nextSessions = db.prepare(`SELECT * FROM sessions WHERE athlete_id = ? AND date > ?
     AND status = 'planned' ORDER BY date LIMIT 7`).all(req.athlete.id, session.date);
 
-  const adaptation = computeAdaptation(feedback, session, nextSessions);
+  // Toutes les séances de la semaine courante (pour compter les jours de repos)
+  const weekStart = new Date(session.date);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // lundi de la semaine
+  const weekEnd   = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const allSessionsThisWeek = db.prepare(
+    `SELECT * FROM sessions WHERE athlete_id = ? AND date >= ? AND date <= ?`
+  ).all(req.athlete.id, weekStart.toISOString().split('T')[0], weekEnd.toISOString().split('T')[0]);
+
+  const adaptation = computeAdaptation(feedback, session, nextSessions, allSessionsThisWeek);
 
   let adaptationId = null;
   if (adaptation.change_type !== 'none') {
